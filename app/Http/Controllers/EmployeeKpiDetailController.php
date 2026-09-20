@@ -1,0 +1,341 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Helpers\Helpers;
+use App\Models\Employee;
+use App\Models\EmployeeKpi;
+use App\Models\EmployeeKpiBonus;
+use App\Models\EmployeeKpiIndicator;
+use App\Models\Kpi;
+use App\Models\KpiCategory;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Crypt;
+use Yajra\DataTables\DataTables;
+
+class EmployeeKpiDetailController extends Controller
+{
+    ## Show Data
+    public function index($employee)
+    {
+        $title = "Detail KPI";
+        $employee = Crypt::decrypt($employee);
+        $employee = Employee::where('id',$employee)->first();
+        $kpi_category = KpiCategory::get();
+        return view('admin.employee_kpi_detail.index', compact('title', 'employee','kpi_category'));
+    }
+
+    ## Get Data
+     public function get_employee_kpi_detail_index(Request $request, $employee)
+    {
+        if ($request->ajax()) {
+            $counters = 1;
+
+            $month = $request->input('get_month') ?? date('m');
+            $year = $request->input('get_year') ?? date('Y');
+
+            $employee_kpi = EmployeeKpi::
+                            where('employee_id', $employee)
+                            ->where('month', $month)
+                            ->where('year', $year)
+                            ->get();
+
+            return DataTables::of($employee_kpi)
+            ->addIndexColumn()
+            ->addColumn('number', function () use (&$counters) {
+                return $counters++;
+            })
+            ->addColumn('display_kpi_category_name', function ($v) {
+                return $v->kpi?->kpi_category?->name;
+            })
+            ->addColumn('display_kpi_name', function ($v) {
+                return $v?->kpi?->name;
+            })
+            ->addColumn('weight_task_value', function ($v){
+                return $v->weight_task_value.' %';
+            })
+            ->addColumn('score', function ($v) use ($month,$year){
+                $score = EmployeeKpiIndicator::whereHas('employee_kpi_period',
+                                            function ($query) use ($v, $month, $year) {
+                                                $query->where('employee_kpi_id', $v->id)
+                                                    ->where('employee_id', $v->employee_id)
+                                                    ->where('month', $month)
+                                                    ->where('year', $year);
+                                            }
+                                        )->sum('score');
+                return $score;
+            })
+            ->addColumn('value', function ($v) use ($month,$year){
+                $value = EmployeeKpiIndicator::whereHas('employee_kpi_period',
+                                            function ($query) use ($v, $month, $year) {
+                                                $query->where('employee_kpi_id', $v->id)
+                                                    ->where('employee_id', $v->employee_id)
+                                                    ->where('month', $month)
+                                                    ->where('year', $year);
+                                            }
+                                        )->sum('value');
+                return number_format(round($value, 2), 2, '.', '');
+            })
+            ->addColumn('total_value', function ($v) use ($month,$year){
+                $value = EmployeeKpiIndicator::whereHas('employee_kpi_period',
+                                            function ($query) use ($v, $month, $year) {
+                                                $query->where('employee_kpi_id', $v->id)
+                                                    ->where('employee_id', $v->employee_id)
+                                                    ->where('month', $month)
+                                                    ->where('year', $year);
+                                            }
+                                        )->sum('value');
+                $total_value = $value * $v->weight_task_value / 100;
+                return number_format(round($total_value, 2), 2, '.', '');
+            })
+            
+            ->addColumn('bonus', function ($v) use ($month,$year){
+                $value = EmployeeKpiBonus::whereHas('employee_kpi_period',
+                                            function ($query) use ($v, $month, $year) {
+                                                $query->where('employee_kpi_id', $v->id)
+                                                    ->where('employee_id', $v->employee_id)
+                                                    ->where('month', $month)
+                                                    ->where('year', $year);
+                                            }
+                                        )->sum('value');
+                return Helpers::format_number($value);
+            })
+            ->addColumn('action', function ($v){
+                $employee_kpi_item = url('employee_kpi_period', Crypt::encrypt($v->id));
+                $btn = '<a href="'.$employee_kpi_item.'" title="Detail">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-list text-info"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                        </a>';
+                if(Auth::user()->group->name == 'Admin KPI'){
+                    // $btn .= '<a href="#" onClick="getData('.$v->id.')" id="'.$v->id.'" title="Edit" data-toggle="modal" data-target="#exampleModal">
+                    //             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-edit-2 text-success"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                    //         </a>';
+                    $btn .= '<a href="#" onclick="deleteData('.$v->id.')" id="'.$v->id.'" class="warning confirm" data-toggle="tooltip" data-placement="top" title="Hapus">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-trash-2 text-danger"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                            </a>';
+                }
+                return $btn;
+            })
+            ->rawColumns(['action'])
+            ->make(true);
+        }
+    }
+
+    
+    public function validate(Request $request, $action)
+    {
+        if ($request->ajax()) {
+
+            $attributes = [
+                'kpi_category_id' => 'Kategori KPI',
+                'kpi_id' => 'KPI',
+                'month' => 'Bulan',
+                'year' => 'Tahun',
+            ];
+
+            if ($action === "Simpan") {
+                $rules = [
+                    'kpi_category_id' => 'required',
+                    'kpi_id' => 'required',
+                    'month' => 'required',
+                    'year' => 'required'
+                ];
+            } else {
+                $rules = [
+                    'kpi_category_id' => 'required',
+                    'kpi_id' => 'required',
+                    'month' => 'required',
+                    'year' => 'required'
+                ];
+            }
+
+            $request->validate($rules, [], $attributes);
+
+            return response()->json(['success' => true]);
+        }
+    }
+
+    ## Save KPI 
+    public function store(Request $request)
+    {
+        if ($request->ajax()) {
+
+            $lastWeightTask = EmployeeKpi::where('employee_id', $request->employee_id)
+                ->where('month', $request->month)
+                ->where('year', $request->year)
+                ->max('weight_task');
+
+            $weightTask = ($lastWeightTask ?? 0) + 1;
+
+            $employee_kpi = new EmployeeKpi();
+            $employee_kpi->employee_id = $request->employee_id;
+            $employee_kpi->kpi_id = $request->kpi_id;
+            $employee_kpi->weight_task = $weightTask;
+            $employee_kpi->month = $request->month;
+            $employee_kpi->year = $request->year;
+            $employee_kpi->save();
+
+
+            // // Aturan bobot
+            // $weights = [
+            //     1 => [100],
+            //     2 => [60, 40],
+            //     3 => [60, 20, 20],
+            // ];
+            
+            // // Update bobot semua task
+            // if (isset($weights[$weightTask])) {
+
+            //     foreach ($weights[$weightTask] as $index => $weight) {
+
+            //         EmployeeKpi::where('employee_id', $request->employee_id)
+            //             ->where('month', $request->month)
+            //             ->where('year', $request->year)
+            //             ->where('weight_task', $index + 1)
+            //             ->update([
+            //                 'weight_task_value' => $weight
+            //             ]);
+            //     }
+            // }
+
+            if ($weightTask == 1) {
+
+                $weights = [100];
+
+            } elseif ($weightTask == 2) {
+
+                $weights = [60, 40];
+
+            } else {
+
+                $weights = [60, 40];
+
+                // Task ke-3 dan seterusnya = 0
+                for ($i = 3; $i <= $weightTask; $i++) {
+                    $weights[] = 0;
+                }
+            }
+
+            foreach ($weights as $index => $weight) {
+
+                EmployeeKpi::where('employee_id', $request->employee_id)
+                    ->where('month', $request->month)
+                    ->where('year', $request->year)
+                    ->where('weight_task', $index + 1)
+                    ->update([
+                        'weight_task_value' => $weight
+                    ]);
+            }
+
+            activity()->log('Create Employee KPI Data');
+            return response()->json(['success' => true, 'message' => 'Tambah Employee KPI Berhasil']);
+        }
+    }
+
+    ## Get KPI
+    public function edit(Request $request, EmployeeKpi $employee_kpi)
+    {
+        if ($request->ajax()) {
+            $kpi = Kpi::where('id',$employee_kpi->kpi_id)->first();
+            return response()->json(['success' => true, 'data' => $employee_kpi, 'kpi' => $kpi]);
+        }
+    }
+
+    ## Edit KPI
+    public function update(Request $request, EmployeeKpi $employee_kpi)
+    {
+        if ($request->ajax()) {
+
+            $employee_kpi->employee_id = $request->employee_id;
+            $employee_kpi->kpi_id = $request->kpi_id;
+            $employee_kpi->month = $request->month;
+            $employee_kpi->year = $request->year;
+            $employee_kpi->save();
+
+            activity()->log('Edit Employee KPI Data With ID = ' . $employee_kpi->id);
+            return response()->json(['success' => true, 'message' => 'Ubah Employee KPI Berhasil']);
+        }
+    }
+
+    ## Delete KPI
+    public function delete(Request $request, EmployeeKpi $employee_kpi)
+    {
+        if ($request->ajax()) {
+
+            // Simpan parameter sebelum data dihapus
+            $employee_id = $employee_kpi->employee_id;
+            $month = $employee_kpi->month;
+            $year = $employee_kpi->year;
+
+            // Hapus data
+            $employee_kpi->delete();
+
+            // Ambil semua task yang tersisa
+            $employee_kpis = EmployeeKpi::where('employee_id', $employee_id)
+                ->where('month', $month)
+                ->where('year', $year)
+                ->orderBy('weight_task')
+                ->get();
+
+            // // Aturan bobot berdasarkan jumlah task
+            // $weights = [
+            //     1 => [100],
+            //     2 => [60, 40],
+            //     3 => [60, 20, 20],
+            // ];
+
+            // $totalTask = $employee_kpis->count();
+
+            // if (isset($weights[$totalTask])) {
+
+            //     foreach ($employee_kpis as $index => $kpi) {
+
+            //         $kpi->weight_task = $index + 1;
+            //         $kpi->weight_task_value = $weights[$totalTask][$index];
+            //         $kpi->save();
+            //     }
+            // } else {
+
+            //     // Jika jumlah task belum memiliki aturan bobot
+            //     foreach ($employee_kpis as $index => $kpi) {
+
+            //         $kpi->weight_task = $index + 1;
+            //         $kpi->save();
+            //     }
+            // }
+
+            // Renumber + atur bobot
+            foreach ($employee_kpis as $index => $kpi) {
+
+                $weightTask = $index + 1;
+
+                $kpi->weight_task = $weightTask;
+
+                if ($weightTask == 1) {
+
+                    $kpi->weight_task_value = 100;
+
+                } elseif ($weightTask == 2) {
+
+                    $kpi->weight_task_value = 40;
+
+                } else {
+
+                    $kpi->weight_task_value = 0;
+                }
+
+                $kpi->save();
+            }
+
+
+            activity()->log(
+                'Delete Employee KPI Data With ID = ' . $employee_kpi->id
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Hapus Employee KPI Berhasil'
+            ]);
+        }
+    }
+}

@@ -1,0 +1,28 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class KpiIndicatorItem extends Model
+{
+    use HasFactory;
+    use SoftDeletes;
+    
+    protected $fillable = [
+        'kpi_indicator_id',
+        'measurement_tool',
+        'physical_evidence'
+    ];
+
+    public function kpi_indicator(){
+        return $this->belongsTo('App\Models\KpiIndicator');
+    }
+    
+    public function employee_kpi_indicator_item(){
+        return $this->hasOne('App\Models\EmployeeKpiIndicatorItem');
+    }
+
+}
