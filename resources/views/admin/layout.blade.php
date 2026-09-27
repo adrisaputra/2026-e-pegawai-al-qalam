@@ -237,7 +237,7 @@ $employee = \App\Helpers\Helpers::employee();
                     </li>
 
                     <li class="menu @if(Request::segment(1)==" employee_report") active @endif">
-                        <a href="{{ url('employee_report_category/'.Crypt::encrypt(Auth::user()->employee_id)) }}" @if(in_array(Request::segment(1), ['employee_report','employee_report_category'])) aria-expanded="true" @endif class="dropdown-toggle">
+                        <a href="{{ url('employee_report_category/'.Crypt::encrypt(Auth::user()->employee_id)) }}" @if(in_array(Request::segment(1), ['employee_report','employee_report_category','employee_report_value','employee_report_file'])) aria-expanded="true" @endif class="dropdown-toggle">
                             <div class="">
                                 <img src="{{ asset('storage/menu/1695533471.png') }}" width="30" height="30" style="margin-right: 18px">
                                 <span>Rapor</span>
