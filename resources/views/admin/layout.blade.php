@@ -110,9 +110,9 @@ $employee = \App\Helpers\Helpers::employee();
                         <div class="user-profile-section">
                             <div class="media mx-auto">
                                 @if (Auth::user()->photo)
-                                <img src="{{ Storage::disk('simpeg_storage')->url('upload/photo/' . Auth::user()->photo) }}" class="img-fluid mr-2" alt="avatar">
+                                <img src="{{ Storage::disk('simpeg_storage')->url('storage/upload/photo/' . Auth::user()->photo) }}" class="img-fluid mr-2" alt="avatar">
                                 @else
-                                <img src="{{ Storage::disk('simpeg_storage')->url('profile-1-20210205190338.jpg') }}" class="img-fluid mr-2" alt="avatar">
+                                <img src="{{ Storage::disk('simpeg_storage')->url('storage/profile-1-20210205190338.jpg') }}" class="img-fluid mr-2" alt="avatar">
                                 @endif
 
                                 <div class="media-body">
@@ -163,9 +163,9 @@ $employee = \App\Helpers\Helpers::employee();
                     <figure class="user-cover-image"></figure>
                     <div class="user-info">
                         @if (Auth::user()->photo)
-                        <img src="{{ Storage::disk('simpeg_storage')->url('upload/photo/' . Auth::user()->photo) }}" alt="avatar">
+                        <img src="{{ Storage::disk('simpeg_storage')->url('storage/upload/photo/' . Auth::user()->photo) }}" alt="avatar">
                         @else
-                        <img src="{{ Storage::disk('simpeg_storage')->url('profile-1-20210205190338.jpg') }}" alt="avatar">
+                        <img src="{{ Storage::disk('simpeg_storage')->url('storage/profile-1-20210205190338.jpg') }}" alt="avatar">
                         @endif
                         <h6 class="">{{ Auth::user()->name }}</h6>
                         <p class="">{{ Auth::user()->group->name }}</p>

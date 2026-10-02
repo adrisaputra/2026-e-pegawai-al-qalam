@@ -49,9 +49,11 @@ class HomeController extends Controller
                                     function ($query) {
                                         $query->where('employee_id', Auth::user()->employee_id)
                                             ->whereMonth('date', date('m'))
-                                            ->whereYear('date', date('Y'));
+                                            ->whereYear('date', date('Y'))
+                                            ->whereHas('employee_report_category');
                                     }
                                 )->sum('value');
+                                
         return view('admin.home', compact('title','total_employee_kpi','report'));
     }
 }
