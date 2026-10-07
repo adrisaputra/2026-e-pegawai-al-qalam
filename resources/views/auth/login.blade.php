@@ -7,7 +7,7 @@ $setting = \App\Helpers\Helpers::setting();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ $setting->application_name }}</title>
+    <title>APLIKASI E-PEGAWAI AL QALAM KENDARI</title>
     <link rel="icon" href="{{ asset('upload/setting/'.$setting->small_icon) }}" type="image/x-icon">
     <link href="https://fonts.googleapis.com/css?family=Quicksand:400,500,600,700&display=swap" rel="stylesheet">
     <style>
@@ -360,7 +360,7 @@ $setting = \App\Helpers\Helpers::setting();
     <div class="login-wrapper">
 
         <div class="bg-side">
-            <img src="{{ asset('storage/upload/setting/'.$setting->large_icon) }}" alt="Logo" style="width: 700px; margin-bottom: 15px;">
+            <img src="{{ asset('storage/upload/setting/21788185127.png') }}" alt="Logo" style="width: 700px; margin-bottom: 15px;">
         </div>
 
         <div class="form-side">
