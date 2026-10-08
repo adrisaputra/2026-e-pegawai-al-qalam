@@ -63,7 +63,7 @@ class EmployeeReportPeriodController extends Controller
             })
             ->addColumn('is_locked', function ($v) {
                 if($v->is_locked==true){
-                    $status ='<span class="badge badge-success">Sudah Dikirm</span>';
+                    $status ='<span class="badge badge-success">Sudah Dikirim</span>';
                 }else{
                     $status ='<span class="badge badge-danger">Belum Dikirim</span>';
                 }
@@ -147,7 +147,7 @@ class EmployeeReportPeriodController extends Controller
                 $employee_report_period->is_locked = 0;
                 $employee_report_period->save();
 
-                activity()->log('Lock Employee Report Period Data With Id = '.$employee_report_period->id);
+                activity()->log('Unlock Employee Report Period Data With Id = '.$employee_report_period->id);
                 return response()->json(['success' => true, 'message' => 'Kirim Data Rapor Berhasil']);
                 
         }
