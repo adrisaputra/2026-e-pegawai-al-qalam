@@ -147,6 +147,7 @@
     function updateValueitem(element, id) {
         let value = null;
         let employee_id = null;
+        let employee_ids = null;
         let reason = null;
 
         // Jika yang berubah adalah radio button
@@ -159,13 +160,13 @@
         }
 
         // Category 4
-        // if ($('#employee_id_' + id).length) {
-        //     employee_id = $('#employee_id_' + id).val();
-        // }
+        if ($('#employee_id_' + id).length) {
+            employee_id = $('#employee_id_' + id).val();
+        }
 
         // Multiple employee
-        if ($('#employee_id_' + id).length) {
-            employee_ids = $('#employee_id_' + id).val() || [];
+        if ($('#employee_ids_' + id).length) {
+            employee_ids = $('#employee_ids_' + id).val() || [];
         }
 
         if ($('#reason_' + id).length) {
@@ -174,6 +175,7 @@
 
         console.log('ID:', id);
         console.log('Value:', value);
+        console.log('Employee ID:', employee_id);
         console.log('Employee IDs:', employee_ids);
     
         var url = "{{ url('/employee_report_value/edit') }}";
@@ -182,6 +184,7 @@
             type: "PUT",
             data: {
                 value : value,
+                employee_id : employee_id,
                 employee_ids : employee_ids,
                 reason : reason,
                 _token: "{{ csrf_token() }}"
