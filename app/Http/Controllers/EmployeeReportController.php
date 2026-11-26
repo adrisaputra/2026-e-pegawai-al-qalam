@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use App\Helpers\Helpers;
 use App\Models\Employee;
 use App\Models\EmployeeReport;
+use App\Models\EmployeeReportCategory;
+use App\Models\EmployeeReportPeriodLock;
+use App\Models\ReportRange;
 use App\Models\WorkUnit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -83,12 +86,37 @@ class EmployeeReportController extends Controller
                                                     $query->where('employee_id', $v->id)
                                                         ->whereMonth('date', $month)
                                                         ->whereYear('date', $year)
-                                                        ->whereHas('employee_report_category', function ($query) use($v) {
-                                                            $query->where('id', $v->employee_report_category_id);
-                                                        });
+                                                        ->where('is_locked', true)
+                                                        ->whereHas('employee_report_category');
+                                                        // ->whereHas('employee_report_category', function ($query) use($v) {
+                                                        //     $query->where('id', $v->employee_report_category_id);
+                                                        // });
                                                 }
                                             )->sum('value');
                     return $value;
+                })
+                ->addColumn('score', function ($v) use ($month,$year){
+                    $value = EmployeeReport::whereHas('employee_report_period',
+                                                function ($query) use ($v, $month, $year) {
+                                                    $query->where('employee_id', $v->id)
+                                                        ->whereMonth('date', $month)
+                                                        ->whereYear('date', $year)
+                                                        ->where('is_locked', true)
+                                                        ->whereHas('employee_report_category');
+                                                }
+                                            )->sum('value');
+                                                    
+                    $employee_report_category = EmployeeReportCategory::where('employee_id', $v->id)
+                                                            ->where('month', $month)
+                                                            ->where('year', $year)
+                                                            ->first();
+
+                    $report_range = ReportRange::where('report_category_id', $employee_report_category?->report_category_id)
+                        ->where('min_value', '<=', $value)
+                        ->where('max_value', '>=', $value)
+                        ->first();
+
+                    return $report_range->score ?? 0;
                 })
                 ->addColumn('action', function ($v){
                     $report = url('employee_report_category', Crypt::encrypt($v->id));
@@ -116,4 +144,47 @@ class EmployeeReportController extends Controller
                 ->rawColumns(['name_display', 'photo', 'action'])->make(true);
         }
     }
+
+    
+    public function period_lock_status($month = null, $year = null,Request $request)
+    {
+        if ($request->ajax()) {
+            $employee_report_period_lock = EmployeeReportPeriodLock::where('month', $month)->where('year', $year)->first();
+            return response()->json(['success' => true, 'message' => 'Data Berhasil Dipublikasikan', 'data' => $employee_report_period_lock]);
+        }
+    }
+
+    public function update_period_lock_status(Request $request)
+    {
+        if ($request->ajax()) {
+
+            $employee_report_period_lock = EmployeeReportPeriodLock::where('month', $request->month)->where('year', $request->year)->first();
+
+            if (!$employee_report_period_lock) {
+                $employee_report_period_lock = new EmployeeReportPeriodLock();
+                $employee_report_period_lock->month = $request->month;
+                $employee_report_period_lock->year = $request->year;
+                $employee_report_period_lock->status = 'locked';
+                $employee_report_period_lock->save();
+                    
+                activity()->log('Update Period Lock Status');
+                return response()->json(['success' => true, 'message' => 'Report Berhasil Dikunci']);
+            } else {
+                $employee_report_period_lock->month = $request->month;
+                $employee_report_period_lock->year = $request->year;
+                if($employee_report_period_lock->status == 'locked'){
+                    $employee_report_period_lock->status = 'unlocked';
+                    $message = 'Report Berhasil Dibuka';
+                } else {
+                    $employee_report_period_lock->status = 'locked';
+                    $message = 'Report Berhasil Dikunci';
+                }
+                $employee_report_period_lock->save();
+
+                activity()->log('Update Period Lock Status');
+                return response()->json(['success' => true, 'message' => $message]);
+            }
+        }
+    }
+
 }

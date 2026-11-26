@@ -18,6 +18,10 @@ class EmployeeReport extends Model
         'employee_id',
         'reason'
     ];
+    
+    protected $casts = [
+        'employee_ids' => 'array',
+    ];
 
     public function employee(){
         return $this->belongsTo('App\Models\Employee');

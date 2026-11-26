@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Employee;
 use App\Models\EmployeeReport;
+use App\Models\EmployeeReportPeriodLock;
 use App\Models\EmployeeReportPeriod;
 use App\Models\Report;
 use Illuminate\Http\Request;
@@ -19,15 +20,19 @@ class EmployeeReportValueController extends Controller
         $employee_report_period = Crypt::decrypt($employee_report_period);
         $employee_report_period = EmployeeReportPeriod::where('id',$employee_report_period)->first();
         $report = Report::where('report_category_id',$employee_report_period->employee_report_category->report_category_id)->get();
-        foreach($report as $v){
-            EmployeeReport::firstOrCreate([
-                'employee_report_period_id' => $employee_report_period->id,
-                'report_id' => $v->id,
-                'category' => $v->category,
-                'name' => $v->name,
-            ]);
+        if (!EmployeeReportPeriodLock::isLockedForDate($employee_report_period->date)) {
+            foreach($report as $v){
+                EmployeeReport::firstOrCreate([
+                    'employee_report_period_id' => $employee_report_period->id,
+                    'report_id' => $v->id,
+                    'category' => $v->category,
+                    'name' => $v->name,
+                ]);
+            }
         }
-        return view('admin.employee_report_value.index', compact('title', 'employee_report_period'));
+        
+        $periodIsLocked = $employee_report_period->is_locked || EmployeeReportPeriodLock::isLockedForDate($employee_report_period->date);
+        return view('admin.employee_report_value.index', compact('title', 'employee_report_period', 'periodIsLocked'));
     }
 
     
@@ -38,6 +43,8 @@ class EmployeeReportValueController extends Controller
 
             $employee_report_period = Crypt::decrypt($employee_report_period);
             $employee_report_period = EmployeeReportPeriod::where('id', $employee_report_period)->first();
+            $periodIsLocked = $employee_report_period->is_locked
+                || EmployeeReportPeriodLock::isLockedForDate($employee_report_period->date);
 
             $employee_report = EmployeeReport::where('employee_report_period_id', $employee_report_period->id)->get();
 
@@ -49,7 +56,7 @@ class EmployeeReportValueController extends Controller
             ->addColumn('name', function ($v) {
                 return $v->name;
             })
-            ->addColumn('value', function ($v) {
+            ->addColumn('value', function ($v) use ($periodIsLocked) {
 
                 $value = null;
 
@@ -59,7 +66,16 @@ class EmployeeReportValueController extends Controller
                         $value = $v->value;
                     } else if (in_array($v->report->category, ['4'])) {
                         $value = '<b>Jumlah JP : </b>'.$v->value;
-                        $value .= '<br><br><b>Pegawai yang digantikan : </b><br>'.$v->employee->name;
+                        $employee_ids = is_array($v->employee_ids)
+                            ? $v->employee_ids
+                            : json_decode($v->employee_ids ?? '[]', true);
+
+                        $employee_ids = $employee_ids ?? [];
+                        $value .= '<br><br><b>Pegawai yang digantikan : </b><br>';
+
+                        $value .= Employee::whereIn('id', $employee_ids)
+                            ->pluck('name')
+                            ->implode('<br>');
                         $value .= '<br><br><b>Alasan : </b>'.$v->reason;
                     } else {
                         $url = url('employee_report_file', Crypt::encrypt($v->id));
@@ -76,7 +92,7 @@ class EmployeeReportValueController extends Controller
 
                 } else {
 
-                    if($v->employee_report_period->is_locked == false){
+                    if (!$periodIsLocked) {
                         if ($v->report->category == 1) {
 
                             $value = '
@@ -168,14 +184,20 @@ class EmployeeReportValueController extends Controller
                             $employee = Employee::get();
                             $value = '<input type="number" name="value_'.$v->id.'" value="'.$v->value.'" onchange="updateValueitem(this, '.$v->id.')" class="form-control form-control-sm" id="value_'.$v->id.'" placeholder="Masukkan Jumlah Jam" >';
                             $value .= '<br>
-                                        <select class="basic form-control form-control-sm" name="employee_id_'.$v->id.'" 
+                                        <select class="basic form-control form-control-sm tagging" multiple="multiple" name="employee_ids_'.$v->id.'[]" 
                                                 onchange="updateValueitem(this, '.$v->id.')" 
                                                 class="form-select form-select-sm" 
                                                 id="employee_id_'.$v->id.'">
                                             <option value="">- Pegawai yang digantikan -</option>';
 
                             foreach ($employee as $x) {
-                                $value .= '<option value="'.$x->id.'" '.($v->employee_id == $x->id ? 'selected' : '').'>'
+                                $employee_ids = is_array($v->employee_ids)
+                                    ? $v->employee_ids
+                                    : json_decode($v->employee_ids ?? '[]', true);
+
+                                $selected = in_array($x->id, $employee_ids) ? 'selected' : '';
+
+                                $value .= '<option value="'.$x->id.'" '.$selected.'>'
                                             .e($x->name).
                                         '</option>';
                             }
@@ -201,7 +223,16 @@ class EmployeeReportValueController extends Controller
                             $value = $v->value;
                         } else if (in_array($v->report->category, ['4'])) {
                             $value = '<b>Jumlah JP : </b>'.$v->value;
-                            $value .= '<br><br><b>Pegawai yang digantikan : </b><br>'.$v->employee->name;
+                            $employee_ids = is_array($v->employee_ids)
+                                ? $v->employee_ids
+                                : json_decode($v->employee_ids ?? '[]', true);
+
+                            $employee_ids = $employee_ids ?? [];
+                            $value .= '<br><br><b>Pegawai yang digantikan : </b><br>';
+
+                            $value .= Employee::whereIn('id', $employee_ids)
+                                ->pluck('name')
+                                ->implode('<br>');
                             $value .= '<br><br><b>Alasan : </b>'.$v->reason;
                         } else {
                             $url = url('employee_report_file', Crypt::encrypt($v->id));
@@ -233,9 +264,14 @@ class EmployeeReportValueController extends Controller
     public function update(Request $request, EmployeeReport $employee_report)
     {
         if ($request->ajax()) {
+            $period = $employee_report->employee_report_period;
+            if ($period->is_locked || EmployeeReportPeriodLock::isLockedForDate($period->date)) {
+                return response()->json(['success' => false, 'message' => EmployeeReportPeriodLock::LOCKED_MESSAGE]);
+            }
 
             $employee_report->value = $request->value;
-            $employee_report->employee_id = $request->employee_id;
+            // $employee_report->employee_id = $request->employee_id;
+            $employee_report->employee_ids = json_encode($request->employee_ids ?? []);
             $employee_report->reason = $request->reason;
             $employee_report->save();
 

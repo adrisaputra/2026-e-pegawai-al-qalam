@@ -62,7 +62,7 @@
 								</table>
                             </div>
                         </div>
-                        @if(Auth::user()->group->name == 'Employee' && $employee_report_period->is_locked == false)
+                        @if(Auth::user()->group->name == 'Employee' && $periodIsLocked == false)
                             <center><a href="#" class="btn mb-2 mr-1 btn-success" data-toggle="tooltip" data-placement="top" title="Kirim Rapor" onClick="sendReport({{ $employee_report_period->id }})">Kirim Rapor</a></center>
                         @endif
                     </div>
@@ -159,8 +159,13 @@
         }
 
         // Category 4
+        // if ($('#employee_id_' + id).length) {
+        //     employee_id = $('#employee_id_' + id).val();
+        // }
+
+        // Multiple employee
         if ($('#employee_id_' + id).length) {
-            employee_id = $('#employee_id_' + id).val();
+            employee_ids = $('#employee_id_' + id).val() || [];
         }
 
         if ($('#reason_' + id).length) {
@@ -169,6 +174,7 @@
 
         console.log('ID:', id);
         console.log('Value:', value);
+        console.log('Employee IDs:', employee_ids);
     
         var url = "{{ url('/employee_report_value/edit') }}";
         $.ajax({
@@ -176,7 +182,7 @@
             type: "PUT",
             data: {
                 value : value,
-                employee_id : employee_id,
+                employee_ids : employee_ids,
                 reason : reason,
                 _token: "{{ csrf_token() }}"
             },

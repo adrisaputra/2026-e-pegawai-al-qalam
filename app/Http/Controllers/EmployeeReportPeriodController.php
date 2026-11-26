@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Helpers\Helpers;
 use App\Models\Employee;
 use App\Models\EmployeeReportCategory;
+use App\Models\EmployeeReportPeriodLock;
 use App\Models\EmployeeReportPeriod;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -20,23 +21,28 @@ class EmployeeReportPeriodController extends Controller
         $employee_report_category = EmployeeReportCategory::where('id',$employee_report_category)->first();
         $employee = Employee::where('id',$employee_report_category->employee_id)->first();
 
-        $startDate = Carbon::create($employee_report_category->year, $employee_report_category->month, 1);
-        $endDate   = $startDate->copy()->endOfMonth();
+        if (!EmployeeReportPeriodLock::isLockedForPeriod(
+            (int) $employee_report_category->month,
+            (int) $employee_report_category->year
+        )) {
+            $startDate = Carbon::create($employee_report_category->year, $employee_report_category->month, 1);
+            $endDate   = $startDate->copy()->endOfMonth();
 
-        while ($startDate->lte($endDate)) {
+            while ($startDate->lte($endDate)) {
 
-            // Senin - Jumat saja
-            if ($startDate->isWeekday()) {
+                // Senin - Jumat saja
+                if ($startDate->isWeekday()) {
 
-                EmployeeReportPeriod::firstOrCreate([
-                    'employee_report_category_id' => $employee_report_category->id,
-                    'employee_id' => $employee_report_category->employee_id,
-                    'day' => Helpers::day_name($startDate->format('l')),
-                    'date' => $startDate->format('Y-m-d'),
-                ]);
+                    EmployeeReportPeriod::firstOrCreate([
+                        'employee_report_category_id' => $employee_report_category->id,
+                        'employee_id' => $employee_report_category->employee_id,
+                        'day' => Helpers::day_name($startDate->format('l')),
+                        'date' => $startDate->format('Y-m-d'),
+                    ]);
+                }
+
+                $startDate->addDay();
             }
-
-            $startDate->addDay();
         }
         return view('admin.employee_report_period.index', compact('title','employee_report_category','employee'));
     }
@@ -50,6 +56,12 @@ class EmployeeReportPeriodController extends Controller
             $month = $request->input('get_month') ? $request->input('get_month') : date('m');
             $year = $request->input('get_year') ? $request->input('get_year') : date('Y');
 
+            $category = EmployeeReportCategory::findOrFail($employee_report_category);
+            $periodIsLocked = EmployeeReportPeriodLock::isLockedForPeriod(
+                (int) $category->month,
+                (int) $category->year
+            );
+
             $employee_report_period = EmployeeReportPeriod::where('employee_report_category_id', $employee_report_category)
                                     ->whereMonth('date', $month)->whereyear('date', $year)->get();
 
@@ -61,8 +73,21 @@ class EmployeeReportPeriodController extends Controller
             ->addColumn('display_date', function ($v) {
                 return $v->day.' / '.date('d-m-Y', strtotime($v->date));
             })
-            ->addColumn('is_locked', function ($v) {
-                if($v->is_locked==true){
+            ->addColumn('is_locked', function ($v) use ($periodIsLocked) {
+                if ($periodIsLocked) {
+                    $status = '<span class="badge badge-warning"><svg xmlns="http://www.w3.org/2000/svg"
+                            width="18" height="18"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            aria-hidden="true">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                        </svg> Terkunci</span>';
+                } elseif($v->is_locked==true){
                     $status ='<span class="badge badge-success">Sudah Dikirim</span>';
                 }else{
                     $status ='<span class="badge badge-danger">Belum Dikirim</span>';
@@ -79,6 +104,11 @@ class EmployeeReportPeriodController extends Controller
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-list text-info"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
                     </a>';
                 
+                if($v->is_locked == true){
+                    $btn .= '<a href="#" title="Kembalikan untuk diperbaiki" onclick="restoreReport('.$v->id.'); return false;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-rotate-ccw text-warning"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 .49-9.97L1 10"></path></svg>
+                    </a>';
+                }
                 return $btn;
             })
             ->rawColumns(['is_locked','action'])
@@ -96,6 +126,12 @@ class EmployeeReportPeriodController extends Controller
                 $year  = $request->year;
 
                 $employee_report_category = EmployeeReportCategory::where('id', $request->employee_report_category_id)->first();
+                if (EmployeeReportPeriodLock::isLockedForPeriod(
+                    (int) $month,
+                    (int) $year
+                )) {
+                    return response()->json(['success' => false, 'message' => EmployeeReportPeriodLock::LOCKED_MESSAGE]);
+                }
                 
                 $startDate = Carbon::create($year, $month, 1);
                 $endDate   = $startDate->copy()->endOfMonth();
@@ -134,7 +170,7 @@ class EmployeeReportPeriodController extends Controller
 
                 activity()->log('Lock Employee Report Period Data With Id = '.$employee_report_period->id);
                 return response()->json(['success' => true, 'message' => 'Kirim Data Rapor Berhasil']);
-                
+
         }
     }
 
@@ -148,8 +184,8 @@ class EmployeeReportPeriodController extends Controller
                 $employee_report_period->save();
 
                 activity()->log('Unlock Employee Report Period Data With Id = '.$employee_report_period->id);
-                return response()->json(['success' => true, 'message' => 'Kirim Data Rapor Berhasil']);
-                
+                return response()->json(['success' => true, 'message' => 'Rapor berhasil dikembalikan dan dapat diedit kembali.']);
+
         }
     }
 
